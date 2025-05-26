@@ -8,6 +8,32 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Journey of Emotion</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, orderBy, getDocs, addDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        
+        // Firebase configuration (replace with your config)
+        const firebaseConfig = {
+            apiKey: "AIzaSyBEtkJvdmuutC49Iu5gurhl1f-0vrHvUJA",
+            authDomain: "journeyofemotio.firebaseapp.com",
+            projectId: "journeyofemotio",
+            storageBucket: journeyofemotio.firebasestorage.app",
+            messagingSenderId: "845193627977",
+            appId: "G-DJX3P13J68"
+        };
+        
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        // Make Firebase available globally
+        window.firebase = { auth, db, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, doc, setDoc, getDoc, updateDoc, collection, query, orderBy, getDocs, addDoc, deleteDoc };
+    </script>
+    
     <style>
         :root {
             --primary-color: #8b5cf6;
@@ -194,147 +220,259 @@
             border-color: #374151;
             transform: scale(1.1);
         }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none !important;
+        }
     </style>
 </head>
 <body class="min-h-screen">
-    <div class="max-w-4xl mx-auto p-4">
-        <!-- Header -->
-        <div class="text-center mb-6 pt-4">
-            <div class="flex justify-between items-center mb-4">
-                <button onclick="showThemeSelector()" class="p-2 rounded-full bg-white shadow-lg hover:shadow-xl transition-all">
-                    🎨
-                </button>
-                <h1 class="text-3xl md:text-4xl font-bold text-gray-800">Journey of Emotion</h1>
-                <button onclick="showView('settings')" class="p-2 rounded-full bg-white shadow-lg hover:shadow-xl transition-all">
-                    ⚙️
-                </button>
+    <!-- Auth Screen -->
+    <div id="authScreen" class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-bold text-gray-800 mb-2">Journey of Emotion</h1>
+                <p class="text-gray-600">Войдите в свой аккаунт</p>
             </div>
-            <p class="text-gray-600 text-sm md:text-base px-4">Отслеживайте, размышляйте и понимайте свои эмоциональные паттерны</p>
-        </div>
 
-        <!-- Navigation -->
-        <div class="flex justify-center mb-6">
-            <div class="bg-white rounded-full p-1 shadow-lg mobile-nav w-full max-w-md flex">
-                <button onclick="showView('log')" id="logBtn" class="flex-1 px-4 py-2 rounded-full transition-all primary-bg text-white shadow-md text-sm">
-                    ➕ Записать
-                </button>
-                <button onclick="showView('history')" id="historyBtn" class="flex-1 px-4 py-2 rounded-full transition-all text-gray-600 hover:bg-gray-100 text-sm">
-                    📅 История
-                </button>
-                <button onclick="showView('insights')" id="insightsBtn" class="flex-1 px-4 py-2 rounded-full transition-all text-gray-600 hover:bg-gray-100 text-sm">
-                    📊 Аналитика
-                </button>
-            </div>
-        </div>
-
-        <!-- Log View -->
-        <div id="logView" class="bg-white rounded-2xl shadow-xl p-4 md:p-8 mx-2 md:max-w-2xl md:mx-auto">
-            <h2 class="text-xl md:text-2xl font-semibold text-gray-800 mb-4 md:mb-6 text-center">Как вы себя чувствуете?</h2>
-            
-            <!-- Emotion Selection -->
-            <div class="mb-4 md:mb-6">
-                <div class="flex justify-between items-center mb-3 md:mb-4">
-                    <h3 class="text-base md:text-lg font-medium text-gray-700">Выберите эмоцию:</h3>
-                    <button onclick="showAddEmotionModal()" class="text-sm primary-text hover:underline">
-                        + Добавить свою
+            <!-- Login Form -->
+            <div id="loginForm">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                        <input type="email" id="loginEmail" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" placeholder="your@email.com">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Пароль</label>
+                        <input type="password" id="loginPassword" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" placeholder="••••••••">
+                    </div>
+                    <button onclick="login()" id="loginBtn" class="w-full primary-bg primary-hover text-white py-3 rounded-lg font-medium">
+                        Войти
                     </button>
                 </div>
-                <div id="emotionGrid" class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mobile-grid">
-                    <!-- Emotions will be rendered here -->
+                <div class="mt-6 text-center">
+                    <p class="text-gray-600">Нет аккаунта? 
+                        <button onclick="showRegisterForm()" class="primary-text hover:underline font-medium">Зарегистрироваться</button>
+                    </p>
                 </div>
             </div>
 
-            <!-- Intensity Slider -->
-            <div id="intensitySection" class="mb-4 md:mb-6 hidden">
-                <h3 class="text-base md:text-lg font-medium text-gray-700 mb-3 md:mb-4">
-                    Интенсивность: <span id="intensityValue">5</span>/10
-                </h3>
-                <input type="range" min="1" max="10" value="5" id="intensitySlider" 
-                       class="w-full h-3 md:h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider">
-                <div class="flex justify-between text-xs md:text-sm text-gray-500 mt-1">
-                    <span>Слабо</span>
-                    <span>Сильно</span>
-                </div>
-            </div>
-
-            <!-- Trigger Input -->
-            <div id="triggerSection" class="mb-4 md:mb-6 hidden">
-                <h3 class="text-base md:text-lg font-medium text-gray-700 mb-2">Что вызвало эту эмоцию?</h3>
-                <input type="text" id="triggerInput" placeholder="например, встреча на работе, разговор с другом..." 
-                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm md:text-base">
-            </div>
-
-            <!-- Note Input -->
-            <div id="noteSection" class="mb-4 md:mb-6 hidden">
-                <h3 class="text-base md:text-lg font-medium text-gray-700 mb-2">Дополнительные заметки (необязательно)</h3>
-                <textarea id="noteInput" placeholder="Как ощущалась эта эмоция? Какие мысли с ней пришли?" 
-                          rows="3" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm md:text-base resize-none"></textarea>
-            </div>
-
-            <!-- Submit Button -->
-            <button id="saveBtn" onclick="saveEntry()" class="w-full primary-bg primary-hover text-white py-3 md:py-3 rounded-lg transition-colors font-medium shadow-lg hidden text-sm md:text-base">
-                Сохранить запись
-            </button>
-        </div>
-
-        <!-- History View -->
-        <div id="historyView" class="bg-white rounded-2xl shadow-xl p-4 md:p-8 mx-2 hidden">
-            <h2 class="text-xl md:text-2xl font-semibold text-gray-800 mb-4 md:mb-6">Ваше эмоциональное путешествие</h2>
-            <div id="historyContent"></div>
-        </div>
-
-        <!-- Insights View -->
-        <div id="insightsView" class="bg-white rounded-2xl shadow-xl p-4 md:p-8 mx-2 hidden">
-            <h2 class="text-xl md:text-2xl font-semibold text-gray-800 mb-4 md:mb-6">Эмоциональная аналитика</h2>
-            <div id="insightsContent"></div>
-        </div>
-
-        <!-- Settings View -->
-        <div id="settingsView" class="bg-white rounded-2xl shadow-xl p-4 md:p-8 mx-2 hidden">
-            <h2 class="text-xl md:text-2xl font-semibold text-gray-800 mb-4 md:mb-6">Настройки</h2>
-            
-            <div class="space-y-6">
-                <!-- Theme Selection -->
-                <div>
-                    <h3 class="text-lg font-medium text-gray-700 mb-3">Цветовая тема</h3>
-                    <div class="flex space-x-3">
-                        <button onclick="changeTheme('purple')" class="theme-btn theme-purple" style="background: linear-gradient(45deg, #8b5cf6, #ec4899)" data-theme="purple"></button>
-                        <button onclick="changeTheme('blue')" class="theme-btn theme-blue" style="background: linear-gradient(45deg, #3b82f6, #06b6d4)" data-theme="blue"></button>
-                        <button onclick="changeTheme('green')" class="theme-btn theme-green" style="background: linear-gradient(45deg, #10b981, #34d399)" data-theme="green"></button>
-                        <button onclick="changeTheme('orange')" class="theme-btn theme-orange" style="background: linear-gradient(45deg, #f59e0b, #fb923c)" data-theme="orange"></button>
-                        <button onclick="changeTheme('rose')" class="theme-btn theme-rose" style="background: linear-gradient(45deg, #e11d48, #f43f5e)" data-theme="rose"></button>
+            <!-- Register Form -->
+            <div id="registerForm" class="hidden">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Имя</label>
+                        <input type="text" id="registerName" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" placeholder="Ваше имя">
                     </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                        <input type="email" id="registerEmail" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" placeholder="your@email.com">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Пароль</label>
+                        <input type="password" id="registerPassword" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" placeholder="••••••••">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Подтвердите пароль</label>
+                        <input type="password" id="confirmPassword" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" placeholder="••••••••">
+                    </div>
+                    <button onclick="register()" id="registerBtn" class="w-full primary-bg primary-hover text-white py-3 rounded-lg font-medium">
+                        Зарегистрироваться
+                    </button>
                 </div>
+                <div class="mt-6 text-center">
+                    <p class="text-gray-600">Уже есть аккаунт? 
+                        <button onclick="showLoginForm()" class="primary-text hover:underline font-medium">Войти</button>
+                    </p>
+                </div>
+            </div>
 
-                <!-- Custom Emotions Management -->
-                <div>
-                    <div class="flex justify-between items-center mb-3">
-                        <h3 class="text-lg font-medium text-gray-700">Ваши эмоции</h3>
-                        <button onclick="showAddEmotionModal()" class="primary-bg primary-hover text-white px-4 py-2 rounded-lg text-sm">
-                            Добавить эмоцию
+            <div id="authError" class="mt-4 p-3 bg-red-100 text-red-700 rounded-lg hidden"></div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="mainApp" class="hidden">
+        <div class="max-w-4xl mx-auto p-4">
+            <!-- Header -->
+            <div class="text-center mb-6 pt-4">
+                <div class="flex justify-between items-center mb-4">
+                    <button onclick="showThemeSelector()" class="p-2 rounded-full bg-white shadow-lg hover:shadow-xl transition-all">
+                        🎨
+                    </button>
+                    <h1 class="text-3xl md:text-4xl font-bold text-gray-800">Journey of Emotion</h1>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="showView('settings')" class="p-2 rounded-full bg-white shadow-lg hover:shadow-xl transition-all">
+                            ⚙️
+                        </button>
+                        <button onclick="logout()" class="p-2 rounded-full bg-white shadow-lg hover:shadow-xl transition-all" title="Выйти">
+                            🚪
                         </button>
                     </div>
-                    <div id="customEmotionsList" class="space-y-2">
-                        <!-- Custom emotions will be listed here -->
+                </div>
+                <p class="text-gray-600 text-sm md:text-base px-4">Отслеживайте, размышляйте и понимайте свои эмоциональные паттерны</p>
+                <p class="text-gray-500 text-xs mt-1">Добро пожаловать, <span id="userName"></span>!</p>
+            </div>
+
+            <!-- Navigation -->
+            <div class="flex justify-center mb-6">
+                <div class="bg-white rounded-full p-1 shadow-lg mobile-nav w-full max-w-md flex">
+                    <button onclick="showView('log')" id="logBtn" class="flex-1 px-4 py-2 rounded-full transition-all primary-bg text-white shadow-md text-sm">
+                        ➕ Записать
+                    </button>
+                    <button onclick="showView('history')" id="historyBtn" class="flex-1 px-4 py-2 rounded-full transition-all text-gray-600 hover:bg-gray-100 text-sm">
+                        📅 История
+                    </button>
+                    <button onclick="showView('insights')" id="insightsBtn" class="flex-1 px-4 py-2 rounded-full transition-all text-gray-600 hover:bg-gray-100 text-sm">
+                        📊 Аналитика
+                    </button>
+                </div>
+            </div>
+
+            <!-- Log View -->
+            <div id="logView" class="bg-white rounded-2xl shadow-xl p-4 md:p-8 mx-2 md:max-w-2xl md:mx-auto">
+                <h2 class="text-xl md:text-2xl font-semibold text-gray-800 mb-4 md:mb-6 text-center">Как вы себя чувствуете?</h2>
+                
+                <!-- Emotion Selection -->
+                <div class="mb-4 md:mb-6">
+                    <div class="flex justify-between items-center mb-3 md:mb-4">
+                        <h3 class="text-base md:text-lg font-medium text-gray-700">Выберите эмоцию:</h3>
+                        <button onclick="showAddEmotionModal()" class="text-sm primary-text hover:underline">
+                            + Добавить свою
+                        </button>
+                    </div>
+                    <div id="emotionGrid" class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mobile-grid">
+                        <!-- Emotions will be rendered here -->
+                    </div>
+                </div>
+
+                <!-- Intensity Slider -->
+                <div id="intensitySection" class="mb-4 md:mb-6 hidden">
+                    <h3 class="text-base md:text-lg font-medium text-gray-700 mb-3 md:mb-4">
+                        Интенсивность: <span id="intensityValue">5</span>/10
+                    </h3>
+                    <input type="range" min="1" max="10" value="5" id="intensitySlider" 
+                           class="w-full h-3 md:h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider">
+                    <div class="flex justify-between text-xs md:text-sm text-gray-500 mt-1">
+                        <span>Слабо</span>
+                        <span>Сильно</span>
+                    </div>
+                </div>
+
+                <!-- Trigger Input -->
+                <div id="triggerSection" class="mb-4 md:mb-6 hidden">
+                    <h3 class="text-base md:text-lg font-medium text-gray-700 mb-2">Что вызвало эту эмоцию?</h3>
+                    <input type="text" id="triggerInput" placeholder="например, встреча на работе, разговор с другом..." 
+                           class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm md:text-base">
+                </div>
+
+                <!-- Note Input -->
+                <div id="noteSection" class="mb-4 md:mb-6 hidden">
+                    <h3 class="text-base md:text-lg font-medium text-gray-700 mb-2">Дополнительные заметки (необязательно)</h3>
+                    <textarea id="noteInput" placeholder="Как ощущалась эта эмоция? Какие мысли с ней пришли?" 
+                              rows="3" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm md:text-base resize-none"></textarea>
+                </div>
+
+                <!-- Submit Button -->
+                <button id="saveBtn" onclick="saveEntry()" class="w-full primary-bg primary-hover text-white py-3 md:py-3 rounded-lg transition-colors font-medium shadow-lg hidden text-sm md:text-base">
+                    <span id="saveBtnText">Сохранить запись</span>
+                    <span id="saveBtnLoader" class="loading hidden"></span>
+                </button>
+            </div>
+
+            <!-- History View -->
+            <div id="historyView" class="bg-white rounded-2xl shadow-xl p-4 md:p-8 mx-2 hidden">
+                <h2 class="text-xl md:text-2xl font-semibold text-gray-800 mb-4 md:mb-6">Ваше эмоциональное путешествие</h2>
+                <div id="historyContent">
+                    <div class="text-center py-12">
+                        <div class="loading mx-auto mb-4"></div>
+                        <p class="text-gray-500">Загружаем историю...</p>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Psychology Tips Section -->
-        <div class="mt-8 bg-white rounded-2xl shadow-xl p-4 md:p-6 mx-2">
-            <div class="text-center mb-4">
-                <h3 class="text-lg md:text-xl font-semibold text-gray-800 mb-2">💡 Совет психолога</h3>
-                <div id="psychologyTip" class="bg-gradient-to-r from-purple-50 to-pink-50 p-4 rounded-lg">
-                    <p id="tipText" class="text-gray-700 text-sm md:text-base italic mb-2">Загружаем совет...</p>
-                    <p id="tipAuthor" class="text-gray-600 text-xs md:text-sm">—</p>
+            <!-- Insights View -->
+            <div id="insightsView" class="bg-white rounded-2xl shadow-xl p-4 md:p-8 mx-2 hidden">
+                <h2 class="text-xl md:text-2xl font-semibold text-gray-800 mb-4 md:mb-6">Эмоциональная аналитика</h2>
+                <div id="insightsContent">
+                    <div class="text-center py-12">
+                        <div class="loading mx-auto mb-4"></div>
+                        <p class="text-gray-500">Загружаем аналитику...</p>
+                    </div>
                 </div>
-                <div class="mt-3 flex justify-center space-x-2">
-                    <button onclick="loadNewTip()" class="primary-bg primary-hover text-white px-4 py-2 rounded-lg text-sm">
-                        Новый совет
-                    </button>
-                    <div class="flex items-center text-xs text-gray-500">
-                        <span id="countdown">30</span>s
+            </div>
+
+            <!-- Settings View -->
+            <div id="settingsView" class="bg-white rounded-2xl shadow-xl p-4 md:p-8 mx-2 hidden">
+                <h2 class="text-xl md:text-2xl font-semibold text-gray-800 mb-4 md:mb-6">Настройки</h2>
+                
+                <div class="space-y-6">
+                    <!-- Profile -->
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-700 mb-3">Профиль</h3>
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <p class="text-gray-600">Email: <span id="userEmail" class="font-medium"></span></p>
+                            <p class="text-gray-600">Имя: <span id="userDisplayName" class="font-medium"></span></p>
+                        </div>
+                    </div>
+
+                    <!-- Theme Selection -->
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-700 mb-3">Цветовая тема</h3>
+                        <div class="flex space-x-3">
+                            <button onclick="changeTheme('purple')" class="theme-btn theme-purple" style="background: linear-gradient(45deg, #8b5cf6, #ec4899)" data-theme="purple"></button>
+                            <button onclick="changeTheme('blue')" class="theme-btn theme-blue" style="background: linear-gradient(45deg, #3b82f6, #06b6d4)" data-theme="blue"></button>
+                            <button onclick="changeTheme('green')" class="theme-btn theme-green" style="background: linear-gradient(45deg, #10b981, #34d399)" data-theme="green"></button>
+                            <button onclick="changeTheme('orange')" class="theme-btn theme-orange" style="background: linear-gradient(45deg, #f59e0b, #fb923c)" data-theme="orange"></button>
+                            <button onclick="changeTheme('rose')" class="theme-btn theme-rose" style="background: linear-gradient(45deg, #e11d48, #f43f5e)" data-theme="rose"></button>
+                        </div>
+                    </div>
+
+                    <!-- Custom Emotions Management -->
+                    <div>
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-lg font-medium text-gray-700">Ваши эмоции</h3>
+                            <button onclick="showAddEmotionModal()" class="primary-bg primary-hover text-white px-4 py-2 rounded-lg text-sm">
+                                Добавить эмоцию
+                            </button>
+                        </div>
+                        <div id="customEmotionsList" class="space-y-2">
+                            <!-- Custom emotions will be listed here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Psychology Tips Section -->
+            <div class="mt-8 bg-white rounded-2xl shadow-xl p-4 md:p-6 mx-2">
+                <div class="text-center mb-4">
+                    <h3 class="text-lg md:text-xl font-semibold text-gray-800 mb-2">💡 Совет психолога</h3>
+                    <div id="psychologyTip" class="bg-gradient-to-r from-purple-50 to-pink-50 p-4 rounded-lg">
+                        <p id="tipText" class="text-gray-700 text-sm md:text-base italic mb-2">Загружаем совет...</p>
+                        <p id="tipAuthor" class="text-gray-600 text-xs md:text-sm">—</p>
+                    </div>
+                    <div class="mt-3 flex justify-center space-x-2">
+                        <button onclick="loadNewTip()" class="primary-bg primary-hover text-white px-4 py-2 rounded-lg text-sm">
+                            Новый совет
+                        </button>
+                        <div class="flex items-center text-xs text-gray-500">
+                            <span id="countdown">30</span>s
+                        </div>
                     </div>
                 </div>
             </div>
@@ -386,7 +524,8 @@
 
             <div class="flex space-x-3">
                 <button onclick="addCustomEmotion()" class="flex-1 primary-bg primary-hover text-white py-2 rounded-lg">
-                    Добавить
+                    <span id="addEmotionBtnText">Добавить</span>
+                    <span id="addEmotionLoader" class="loading hidden"></span>
                 </button>
                 <button onclick="closeAddEmotionModal()" class="flex-1 bg-gray-200 text-gray-800 py-2 rounded-lg">
                     Отмена
@@ -396,10 +535,11 @@
     </div>
 
     <script>
-        // Data storage
-        let entries = JSON.parse(localStorage.getItem('emotionEntries')) || [];
+        // Global variables
+        let currentUser = null;
+        let entries = [];
         let selectedEmotion = '';
-        let currentTheme = localStorage.getItem('selectedTheme') || 'purple';
+        let currentTheme = 'purple';
         let selectedEmoji = '';
 
         // Default emotions
@@ -414,9 +554,8 @@
             anxiety: { name: 'Тревога', color: 'bg-purple-500', emoji: '😰', isDefault: true }
         };
 
-        // Load custom emotions
-        let customEmotions = JSON.parse(localStorage.getItem('customEmotions')) || {};
-        let emotions = { ...defaultEmotions, ...customEmotions };
+        let customEmotions = {};
+        let emotions = { ...defaultEmotions };
 
         // Available emojis for selection
         const availableEmojis = [
@@ -440,13 +579,229 @@
             '🕉️', '☸️', '✡️', '🔯', '🕎', '☯️', '☦️', '🛐'
         ];
 
+        // Firebase Authentication Functions
+        async function login() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
+            if (!email || !password) {
+                showAuthError('Пожалуйста, заполните все поля');
+                return;
+            }
+
+            const loginBtn = document.getElementById('loginBtn');
+            loginBtn.innerHTML = '<span class="loading"></span> Вход...';
+            loginBtn.disabled = true;
+
+            try {
+                const userCredential = await window.firebase.signInWithEmailAndPassword(window.firebase.auth, email, password);
+                currentUser = userCredential.user;
+                hideAuthError();
+                await loadUserData();
+                showMainApp();
+            } catch (error) {
+                console.error('Login error:', error);
+                showAuthError(getAuthErrorMessage(error.code));
+            } finally {
+                loginBtn.innerHTML = 'Войти';
+                loginBtn.disabled = false;
+            }
+        }
+
+        async function register() {
+            const name = document.getElementById('registerName').value;
+            const email = document.getElementById('registerEmail').value;
+            const password = document.getElementById('registerPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+
+            if (!name || !email || !password || !confirmPassword) {
+                showAuthError('Пожалуйста, заполните все поля');
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                showAuthError('Пароли не совпадают');
+                return;
+            }
+
+            if (password.length < 6) {
+                showAuthError('Пароль должен содержать минимум 6 символов');
+                return;
+            }
+
+            const registerBtn = document.getElementById('registerBtn');
+            registerBtn.innerHTML = '<span class="loading"></span> Регистрация...';
+            registerBtn.disabled = true;
+
+            try {
+                const userCredential = await window.firebase.createUserWithEmailAndPassword(window.firebase.auth, email, password);
+                currentUser = userCredential.user;
+                
+                // Update profile with display name
+                await window.firebase.updateProfile(currentUser, {
+                    displayName: name
+                });
+
+                // Initialize user data in Firestore
+                await initializeUserData(name);
+                
+                hideAuthError();
+                await loadUserData();
+                showMainApp();
+            } catch (error) {
+                console.error('Register error:', error);
+                showAuthError(getAuthErrorMessage(error.code));
+            } finally {
+                registerBtn.innerHTML = 'Зарегистрироваться';
+                registerBtn.disabled = false;
+            }
+        }
+
+        async function logout() {
+            try {
+                await window.firebase.signOut(window.firebase.auth);
+                currentUser = null;
+                entries = [];
+                customEmotions = {};
+                emotions = { ...defaultEmotions };
+                showAuthScreen();
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+        }
+
+        function showAuthError(message) {
+            const errorDiv = document.getElementById('authError');
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('hidden');
+        }
+
+        function hideAuthError() {
+            document.getElementById('authError').classList.add('hidden');
+        }
+
+        function getAuthErrorMessage(errorCode) {
+            switch (errorCode) {
+                case 'auth/user-not-found':
+                    return 'Пользователь с таким email не найден';
+                case 'auth/wrong-password':
+                    return 'Неверный пароль';
+                case 'auth/email-already-in-use':
+                    return 'Пользователь с таким email уже существует';
+                case 'auth/weak-password':
+                    return 'Пароль слишком слабый';
+                case 'auth/invalid-email':
+                    return 'Неверный формат email';
+                default:
+                    return 'Произошла ошибка. Попробуйте еще раз';
+            }
+        }
+
+        function showLoginForm() {
+            document.getElementById('loginForm').classList.remove('hidden');
+            document.getElementById('registerForm').classList.add('hidden');
+            hideAuthError();
+        }
+
+        function showRegisterForm() {
+            document.getElementById('loginForm').classList.add('hidden');
+            document.getElementById('registerForm').classList.remove('hidden');
+            hideAuthError();
+        }
+
+        function showAuthScreen() {
+            document.getElementById('authScreen').classList.remove('hidden');
+            document.getElementById('mainApp').classList.add('hidden');
+        }
+
+        function showMainApp() {
+            document.getElementById('authScreen').classList.add('hidden');
+            document.getElementById('mainApp').classList.remove('hidden');
+            
+            // Update user info
+            document.getElementById('userName').textContent = currentUser.displayName || 'Пользователь';
+            document.getElementById('userEmail').textContent = currentUser.email;
+            document.getElementById('userDisplayName').textContent = currentUser.displayName || 'Не указано';
+        }
+
+        // Firebase Data Functions
+        async function initializeUserData(displayName) {
+            const userDoc = window.firebase.doc(window.firebase.db, 'users', currentUser.uid);
+            await window.firebase.setDoc(userDoc, {
+                displayName: displayName,
+                email: currentUser.email,
+                theme: 'purple',
+                createdAt: new Date(),
+                customEmotions: {}
+            });
+        }
+
+        async function loadUserData() {
+            try {
+                // Load user settings
+                const userDoc = window.firebase.doc(window.firebase.db, 'users', currentUser.uid);
+                const userSnap = await window.firebase.getDoc(userDoc);
+                
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    currentTheme = userData.theme || 'purple';
+                    customEmotions = userData.customEmotions || {};
+                    emotions = { ...defaultEmotions, ...customEmotions };
+                    changeTheme(currentTheme);
+                }
+
+                // Load entries
+                await loadEntries();
+                
+                renderEmotions();
+            } catch (error) {
+                console.error('Error loading user data:', error);
+            }
+        }
+
+        async function loadEntries() {
+            try {
+                const entriesRef = window.firebase.collection(window.firebase.db, 'users', currentUser.uid, 'entries');
+                const q = window.firebase.query(entriesRef, window.firebase.orderBy('timestamp', 'desc'));
+                const querySnapshot = await window.firebase.getDocs(q);
+                
+                entries = [];
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    entries.push({
+                        id: doc.id,
+                        ...data,
+                        timestamp: data.timestamp.toDate() // Convert Firestore timestamp to Date
+                    });
+                });
+            } catch (error) {
+                console.error('Error loading entries:', error);
+                entries = [];
+            }
+        }
+
+        async function saveUserSettings() {
+            try {
+                const userDoc = window.firebase.doc(window.firebase.db, 'users', currentUser.uid);
+                await window.firebase.updateDoc(userDoc, {
+                    theme: currentTheme,
+                    customEmotions: customEmotions
+                });
+            } catch (error) {
+                console.error('Error saving user settings:', error);
+            }
+        }
+
         // Theme management
-        function changeTheme(theme) {
+        async function changeTheme(theme) {
             currentTheme = theme;
             document.body.className = `min-h-screen theme-${theme}`;
-            localStorage.setItem('selectedTheme', theme);
             updateActiveThemeButton();
             closeThemeModal();
+            
+            if (currentUser) {
+                await saveUserSettings();
+            }
         }
 
         function updateActiveThemeButton() {
@@ -547,7 +902,7 @@
             });
         }
 
-        function addCustomEmotion() {
+        async function addCustomEmotion() {
             const name = document.getElementById('emotionNameInput').value.trim();
             
             if (!name || !selectedEmoji) {
@@ -555,34 +910,53 @@
                 return;
             }
 
-            const emotionId = 'custom_' + Date.now();
-            const colors = ['bg-purple-400', 'bg-indigo-400', 'bg-blue-400', 'bg-green-400', 'bg-yellow-400', 'bg-red-400', 'bg-pink-400', 'bg-teal-400'];
-            const randomColor = colors[Math.floor(Math.random() * colors.length)];
-
-            const newEmotion = {
-                name: name,
-                color: randomColor,
-                emoji: selectedEmoji,
-                isDefault: false
-            };
-
-            customEmotions[emotionId] = newEmotion;
-            emotions[emotionId] = newEmotion;
+            const addBtn = document.getElementById('addEmotionBtnText');
+            const loader = document.getElementById('addEmotionLoader');
             
-            localStorage.setItem('customEmotions', JSON.stringify(customEmotions));
-            
-            renderEmotions();
-            renderCustomEmotionsList();
-            closeAddEmotionModal();
-        }
+            addBtn.classList.add('hidden');
+            loader.classList.remove('hidden');
 
-        function deleteCustomEmotion(emotionId) {
-            if (confirm('Удалить эту эмоцию?')) {
-                delete customEmotions[emotionId];
-                delete emotions[emotionId];
-                localStorage.setItem('customEmotions', JSON.stringify(customEmotions));
+            try {
+                const emotionId = 'custom_' + Date.now();
+                const colors = ['bg-purple-400', 'bg-indigo-400', 'bg-blue-400', 'bg-green-400', 'bg-yellow-400', 'bg-red-400', 'bg-pink-400', 'bg-teal-400'];
+                const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+                const newEmotion = {
+                    name: name,
+                    color: randomColor,
+                    emoji: selectedEmoji,
+                    isDefault: false
+                };
+
+                customEmotions[emotionId] = newEmotion;
+                emotions[emotionId] = newEmotion;
+                
+                await saveUserSettings();
+                
                 renderEmotions();
                 renderCustomEmotionsList();
+                closeAddEmotionModal();
+            } catch (error) {
+                console.error('Error adding custom emotion:', error);
+                alert('Ошибка при добавлении эмоции');
+            } finally {
+                addBtn.classList.remove('hidden');
+                loader.classList.add('hidden');
+            }
+        }
+
+        async function deleteCustomEmotion(emotionId) {
+            if (confirm('Удалить эту эмоцию?')) {
+                try {
+                    delete customEmotions[emotionId];
+                    delete emotions[emotionId];
+                    await saveUserSettings();
+                    renderEmotions();
+                    renderCustomEmotionsList();
+                } catch (error) {
+                    console.error('Error deleting custom emotion:', error);
+                    alert('Ошибка при удалении эмоции');
+                }
             }
         }
 
@@ -611,14 +985,6 @@
             
             container.innerHTML = html;
         }
-
-        // Add event listener for emotion name input
-        document.addEventListener('DOMContentLoaded', function() {
-            const emotionNameInput = document.getElementById('emotionNameInput');
-            if (emotionNameInput) {
-                emotionNameInput.addEventListener('input', updateEmotionPreview);
-            }
-        });
 
         // Navigation
         function showView(view) {
@@ -668,27 +1034,60 @@
         }
 
         // Intensity slider
-        document.getElementById('intensitySlider').addEventListener('input', function() {
-            document.getElementById('intensityValue').textContent = this.value;
+        document.addEventListener('DOMContentLoaded', function() {
+            const intensitySlider = document.getElementById('intensitySlider');
+            if (intensitySlider) {
+                intensitySlider.addEventListener('input', function() {
+                    document.getElementById('intensityValue').textContent = this.value;
+                });
+            }
+
+            const emotionNameInput = document.getElementById('emotionNameInput');
+            if (emotionNameInput) {
+                emotionNameInput.addEventListener('input', updateEmotionPreview);
+            }
         });
 
         // Save entry
-        function saveEntry() {
-            if (!selectedEmotion) return;
+        async function saveEntry() {
+            if (!selectedEmotion || !currentUser) return;
 
-            const entry = {
-                id: Date.now(),
-                emotion: selectedEmotion,
-                intensity: parseInt(document.getElementById('intensitySlider').value),
-                trigger: document.getElementById('triggerInput').value,
-                note: document.getElementById('noteInput').value,
-                timestamp: new Date()
-            };
+            const saveBtnText = document.getElementById('saveBtnText');
+            const saveBtnLoader = document.getElementById('saveBtnLoader');
+            
+            saveBtnText.classList.add('hidden');
+            saveBtnLoader.classList.remove('hidden');
 
-            entries.unshift(entry);
-            localStorage.setItem('emotionEntries', JSON.stringify(entries));
+            try {
+                const entry = {
+                    emotion: selectedEmotion,
+                    intensity: parseInt(document.getElementById('intensitySlider').value),
+                    trigger: document.getElementById('triggerInput').value,
+                    note: document.getElementById('noteInput').value,
+                    timestamp: new Date()
+                };
 
-            // Reset form
+                // Save to Firestore
+                const entriesRef = window.firebase.collection(window.firebase.db, 'users', currentUser.uid, 'entries');
+                const docRef = await window.firebase.addDoc(entriesRef, entry);
+                
+                // Add to local array with document ID
+                entry.id = docRef.id;
+                entries.unshift(entry);
+
+                // Reset form
+                resetEntryForm();
+                alert('Запись успешно сохранена!');
+            } catch (error) {
+                console.error('Error saving entry:', error);
+                alert('Ошибка при сохранении записи');
+            } finally {
+                saveBtnText.classList.remove('hidden');
+                saveBtnLoader.classList.add('hidden');
+            }
+        }
+
+        function resetEntryForm() {
             selectedEmotion = '';
             document.querySelectorAll('.emotion-btn').forEach(btn => {
                 btn.className = 'emotion-btn p-3 md:p-4 rounded-xl border-2 border-gray-200 hover:border-gray-300 transition-all';
@@ -703,8 +1102,6 @@
             document.getElementById('triggerSection').classList.add('hidden');
             document.getElementById('noteSection').classList.add('hidden');
             document.getElementById('saveBtn').classList.add('hidden');
-
-            alert('Запись успешно сохранена!');
         }
 
         // Display history
@@ -720,7 +1117,21 @@
             for (let i = 0; i < entries.length; i++) {
                 const entry = entries[i];
                 const emotion = emotions[entry.emotion] || { name: 'Неизвестная эмоция', color: 'bg-gray-400', emoji: '❓' };
-                const date = new Date(entry.timestamp).toLocaleString('ru-RU');
+                
+                // Fix date formatting issue
+                let date;
+                try {
+                    if (entry.timestamp instanceof Date) {
+                        date = entry.timestamp.toLocaleString('ru-RU');
+                    } else if (entry.timestamp && entry.timestamp.toDate) {
+                        date = entry.timestamp.toDate().toLocaleString('ru-RU');
+                    } else {
+                        date = new Date(entry.timestamp).toLocaleString('ru-RU');
+                    }
+                } catch (error) {
+                    console.error('Date formatting error:', error);
+                    date = 'Дата недоступна';
+                }
                 
                 html += '<div class="border border-gray-200 rounded-lg p-3 md:p-4 hover:shadow-md transition-shadow">';
                 html += '<div class="flex items-start space-x-3 md:space-x-4">';
@@ -830,15 +1241,6 @@
             insightsContent.innerHTML = '<div class="space-y-6 md:space-y-8"><div><h3 class="text-lg md:text-xl font-medium text-gray-800 mb-3 md:mb-4">Самые частые эмоции</h3>' + commonEmotionsHtml + '</div><div><h3 class="text-lg md:text-xl font-medium text-gray-800 mb-3 md:mb-4">Средняя интенсивность по эмоциям</h3>' + avgIntensityHtml + '</div><div class="bg-gradient-to-r from-purple-50 to-pink-50 p-4 md:p-6 rounded-lg"><h3 class="text-lg md:text-xl font-medium text-gray-800 mb-2">Сводка вашего путешествия</h3><p class="text-gray-700 text-sm md:text-base">Вы записали ' + entries.length + ' эмоциональных состояний. Продолжайте отслеживать, чтобы лучше понимать свои паттерны и эмоциональное благополучие!</p></div></div>';
         }
 
-        // Initialize app
-        function initApp() {
-            changeTheme(currentTheme);
-            renderEmotions();
-            loadPsychologyTip();
-            startTipTimer();
-            showView('log');
-        }
-
         // Psychology Tips functionality
         let tipTimer;
         let countdownInterval;
@@ -923,16 +1325,19 @@
 
         function startTipTimer() {
             let countdown = 30;
+            const countdownElement = document.getElementById('countdown');
             
-            countdownInterval = setInterval(() => {
-                countdown--;
-                document.getElementById('countdown').textContent = countdown;
-                
-                if (countdown <= 0) {
-                    loadPsychologyTip();
-                    countdown = 30;
-                }
-            }, 1000);
+            if (countdownElement) {
+                countdownInterval = setInterval(() => {
+                    countdown--;
+                    countdownElement.textContent = countdown;
+                    
+                    if (countdown <= 0) {
+                        loadPsychologyTip();
+                        countdown = 30;
+                    }
+                }, 1000);
+            }
 
             tipTimer = setInterval(() => {
                 loadPsychologyTip();
@@ -940,9 +1345,36 @@
         }
 
         function resetTipTimer() {
-            clearInterval(tipTimer);
-            clearInterval(countdownInterval);
+            if (tipTimer) clearInterval(tipTimer);
+            if (countdownInterval) clearInterval(countdownInterval);
             startTipTimer();
+        }
+
+        // Initialize app
+        function initApp() {
+            // Check if Firebase is loaded
+            if (!window.firebase) {
+                console.error('Firebase not loaded. Please check your Firebase configuration.');
+                document.getElementById('authScreen').innerHTML = '<div class="min-h-screen flex items-center justify-center p-4"><div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center"><h2 class="text-2xl font-bold text-gray-800 mb-4">Ошибка конфигурации</h2><p class="text-gray-600 mb-4">Пожалуйста, настройте Firebase конфигурацию в коде приложения.</p><p class="text-sm text-gray-500">Замените firebaseConfig на ваши настройки Firebase.</p></div></div>';
+                return;
+            }
+
+            changeTheme(currentTheme);
+            loadPsychologyTip();
+            startTipTimer();
+            
+            // Listen for auth state changes
+            window.firebase.onAuthStateChanged(window.firebase.auth, async (user) => {
+                if (user) {
+                    currentUser = user;
+                    await loadUserData();
+                    showMainApp();
+                    showView('log');
+                } else {
+                    currentUser = null;
+                    showAuthScreen();
+                }
+            });
         }
 
         // Close modals when clicking outside
@@ -952,8 +1384,41 @@
             }
         });
 
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(event) {
+            // ESC to close modals
+            if (event.key === 'Escape') {
+                document.querySelectorAll('.modal.show').forEach(modal => {
+                    modal.classList.remove('show');
+                });
+            }
+            
+            // Enter to submit forms
+            if (event.key === 'Enter' && !event.shiftKey) {
+                if (document.getElementById('loginForm').classList.contains('hidden') === false) {
+                    event.preventDefault();
+                    login();
+                } else if (document.getElementById('registerForm').classList.contains('hidden') === false) {
+                    event.preventDefault();
+                    register();
+                }
+            }
+        });
+
         // Initialize when DOM is loaded
-        document.addEventListener('DOMContentLoaded', initApp);
+        document.addEventListener('DOMContentLoaded', function() {
+            // Wait a bit for Firebase to load
+            setTimeout(initApp, 500);
+        });
+
+        // Error boundary for better debugging
+        window.addEventListener('error', function(event) {
+            console.error('Global error:', event.error);
+        });
+
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('Unhandled promise rejection:', event.reason);
+        });
     </script>
 </body>
 </html>
