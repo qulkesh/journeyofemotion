@@ -1,0 +1,33 @@
+# netlify.toml - файл конфигурации Netlify
+[build]
+  # Указываем папку для публикации (если у вас всё в корне, можно указать ".")
+  publish = "."
+  
+  # Команда сборки (если не нужна, можно убрать)
+  # command = "echo 'No build command needed'"
+
+[functions]
+  # Папка с функциями (по умолчанию netlify/functions)
+  directory = "netlify/functions"
+
+# Настройки для окружения (переменные уже настроены в UI)
+[context.production]
+  # Дополнительные настройки для продакшена
+
+[context.deploy-preview]
+  # Настройки для превью деплоя
+
+# Перенаправления (если нужны)
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# Заголовки безопасности (опционально)
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
