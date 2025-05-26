@@ -739,22 +739,46 @@
 
         async function loadUserData() {
             try {
+                console.log('Loading user data for:', currentUser.uid);
+                
                 // Load user settings
                 const userDoc = window.firebase.doc(window.firebase.db, 'users', currentUser.uid);
                 const userSnap = await window.firebase.getDoc(userDoc);
                 
                 if (userSnap.exists()) {
                     const userData = userSnap.data();
+                    console.log('User data loaded:', userData);
+                    
                     currentTheme = userData.theme || 'purple';
                     customEmotions = userData.customEmotions || {};
-                    emotions = { ...defaultEmotions, ...customEmotions };
+                    
+                    // Merge default and custom emotions
+                    emotions = { ...defaultEmotions };
+                    Object.keys(customEmotions).forEach(key => {
+                        emotions[key] = customEmotions[key];
+                    });
+                    
+                    console.log('Custom emotions loaded:', customEmotions);
+                    console.log('All emotions:', emotions);
+                    
                     changeTheme(currentTheme);
+                } else {
+                    console.log('No user document found, creating one...');
+                    // Create initial user document
+                    await window.firebase.setDoc(userDoc, {
+                        displayName: currentUser.displayName || 'Пользователь',
+                        email: currentUser.email,
+                        theme: 'purple',
+                        createdAt: new Date(),
+                        customEmotions: {}
+                    });
                 }
 
                 // Load entries
                 await loadEntries();
                 
                 renderEmotions();
+                console.log('User data loading complete');
             } catch (error) {
                 console.error('Error loading user data:', error);
             }
@@ -783,13 +807,33 @@
 
         async function saveUserSettings() {
             try {
+                console.log('Saving user settings...', {
+                    theme: currentTheme,
+                    customEmotions: customEmotions
+                });
+                
                 const userDoc = window.firebase.doc(window.firebase.db, 'users', currentUser.uid);
                 await window.firebase.updateDoc(userDoc, {
                     theme: currentTheme,
                     customEmotions: customEmotions
                 });
+                
+                console.log('User settings saved successfully');
             } catch (error) {
                 console.error('Error saving user settings:', error);
+                // Try to create the document if it doesn't exist
+                try {
+                    await window.firebase.setDoc(userDoc, {
+                        displayName: currentUser.displayName || 'Пользователь',
+                        email: currentUser.email,
+                        theme: currentTheme,
+                        createdAt: new Date(),
+                        customEmotions: customEmotions
+                    });
+                    console.log('User document created and settings saved');
+                } catch (createError) {
+                    console.error('Error creating user document:', createError);
+                }
             }
         }
 
@@ -929,17 +973,25 @@
                     isDefault: false
                 };
 
+                // Add to local objects
                 customEmotions[emotionId] = newEmotion;
                 emotions[emotionId] = newEmotion;
                 
+                console.log('Adding custom emotion:', emotionId, newEmotion);
+                console.log('Updated customEmotions:', customEmotions);
+                
+                // Save to Firebase
                 await saveUserSettings();
                 
+                // Update UI
                 renderEmotions();
                 renderCustomEmotionsList();
                 closeAddEmotionModal();
+                
+                console.log('Custom emotion added successfully');
             } catch (error) {
                 console.error('Error adding custom emotion:', error);
-                alert('Ошибка при добавлении эмоции');
+                alert('Ошибка при добавлении эмоции: ' + error.message);
             } finally {
                 addBtn.classList.remove('hidden');
                 loader.classList.add('hidden');
@@ -949,14 +1001,25 @@
         async function deleteCustomEmotion(emotionId) {
             if (confirm('Удалить эту эмоцию?')) {
                 try {
+                    console.log('Deleting custom emotion:', emotionId);
+                    
+                    // Remove from local objects
                     delete customEmotions[emotionId];
                     delete emotions[emotionId];
+                    
+                    console.log('Updated customEmotions after delete:', customEmotions);
+                    
+                    // Save to Firebase
                     await saveUserSettings();
+                    
+                    // Update UI
                     renderEmotions();
                     renderCustomEmotionsList();
+                    
+                    console.log('Custom emotion deleted successfully');
                 } catch (error) {
                     console.error('Error deleting custom emotion:', error);
-                    alert('Ошибка при удалении эмоции');
+                    alert('Ошибка при удалении эмоции: ' + error.message);
                 }
             }
         }
