@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>Journey of Emotion</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOCIgZmlsbD0iIzg5NTVGNCIvPgo8cGF0aCBkPSJNMTYgMTBIMTJDMTAuODk1NCAxMCAxMCAxMC44OTU0IDEwIDEyVjIwQzEwIDIxLjEwNDYgMTAuODk1NCAyMiAxMiAyMkgyMEMyMS4xMDQ2IDIyIDIyIDIxLjEwNDYgMjIgMjBWMTZIMjBWMjBIMTJWMTJIMTZWMTBaIiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNMTkgN0MxOC40NDc3IDcgMTggNy40NDc3MiAxOCA4QzE4IDguNTUyMjggMTguNDQ3NyA5IDE5IDlIMjFWMTFDMjEgMTEuNTUyMyAyMS40NDc3IDEyIDIyIDEyQzIyLjU1MjMgMTIgMjMgMTEuNTUyMyAyMyAxMVY5SDI1QzI1LjU1MjMgOSAyNiA4LjU1MjI4IDI2IDhDMjYgNy40NDc3MiAyNS41NTIzIDcgMjUgN0gyM1Y1QzIzIDQuNDQ3NzIgMjIuNTUyMyA0IDIyIDRDMjEuNDQ3NyA0IDIxIDQuNDQ3NzIgMjEgNVY3SDE5WiIgZmlsbD0id2hpdGUiLz4KPHN2Zz4=">
+    
+    <!-- Meta tags for PWA -->
+    <meta name="theme-color" content="#8b5cf6">
+    <meta name="description" content="Отслеживайте, размышляйте и понимайте свои эмоциональные паттерны">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Firebase SDK - используем статический импорт -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
+    <script>
+        // Глобальные переменные
+        let app, db, auth;
+        window.currentUser = null;
+        window.firebaseInitialized = false;
+
+        // Функция для безопасной загрузки конфигурации Firebase
+        async function loadFirebaseConfig() {
+            try {
+                console.log('Загружаем конфигурацию Firebase...');
+                
+                // Попытка загрузить из Netlify Function
+                const response = await fetch('/.netlify/functions/firebase-config', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const config = await response.json();
+                
+                if (!config.apiKey || !config.projectId) {
+                    throw new Error('Неполная конфигурация Firebase');
+                }
+
+                console.log('Конфигурация Firebase загружена успешно');
+                return config;
+                
+            } catch (error) {
+                console.error('Ошибка загрузки конфигурации Firebase:', error);
+                
+                // Fallback для разработки (только для localhost)
+                if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                    console.warn('Используется demo конфигурация для разработки');
+                    return {
+                        apiKey: "demo-key-for-development",
+                        authDomain: "demo-project.firebaseapp.com",
+                        projectId: "demo-project",
+                        storageBucket: "demo-project.appspot.com",
+                        messagingSenderId: "123456789",
+                        appId: "demo-app-id"
+                    };
+                }
+                
+                throw new Error('Не удалось загрузить конфигурацию Firebase');
+            }
+        }
+
+        // Инициализация Firebase
+        async function initializeFirebase() {
+            try {
+                // Загружаем конфигурацию
+                const firebaseConfig = await loadFirebaseConfig();
+                
+                // Инициализируем Firebase
+                app = firebase.initializeApp(firebaseConfig);
+                db = firebase.firestore();
+                auth = firebase.auth();
+                window.firebaseInitialized = true;
+                
+                console.log('Firebase успешно инициализирован');
+                updateConnectionStatus('online', 'Подключено к базе данных');
+                document.getElementById('userStatus').textContent = '✅ Готов к работе';
+
+                // Настройка слушателя аутентификации
+                auth.onAuthStateChanged((user) => {
+                    if (user) {
+                        window.currentUser = user;
+                        console.log('Пользователь авторизован:', user.uid);
+                        hideAuthModal();
+                        updateUserStatus(user);
+                        updateAuthUI(true);
+                        
+                        if (window.loadUserData) {
+                            window.loadUserData();
+                        }
+                    } else {
+                        window.currentUser = null;
+                        showAuthModal();
+                        updateAuthUI(false);
+                        document.getElementById('userStatus').textContent = '🔒 Требуется авторизация';
+                    }
+                });
+
+                return true;
+            } catch (error) {
+                console.error('Ошибка инициализации Firebase:', error);
+                window.firebaseInitialized = false;
+                updateConnectionStatus('offline', 'Ошибка подключения к базе данных');
+                document.getElementById('userStatus').textContent = '⚠️ Ошибка подключения к базе данных';
+                
+                // Показываем пользователю информацию об ошибке
+                showFirebaseError(error.message);
+                return false;
+            }
+        }
+
+        function showFirebaseError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'fixed top-4 left-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded z-50';
+            errorDiv.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div>
+                        <strong class="font-bold">Ошибка подключения!</strong>
+                        <span class="block sm:inline"> ${message}</span>
+                    </div>
+                    <button onclick="this.parentElement.parentElement.remove()" class="text-red-500 hover:text-red-700">
+                        ✕
+                    </button>
+                </div>
+            `;
+            document.body.appendChild(errorDiv);
+            
+            // Автоматически скрыть через 10 секунд
+            setTimeout(() => {
+                if (errorDiv.parentElement) {
+                    errorDiv.remove();
+                }
+            }, 10000);
+        }
+
+        function updateAuthUI(isLoggedIn) {
+            const headerLoginBtn = document.getElementById('headerLoginBtn');
+            
+            if (isLoggedIn) {
+                headerLoginBtn.innerHTML = '🚪';
+                headerLoginBtn.title = 'Выйти';
+                headerLoginBtn.onclick = signOutUser;
+            } else {
+                headerLoginBtn.innerHTML = '🔑';
+                headerLoginBtn.title = 'Войти';
+                headerLoginBtn.onclick = showAuthModal;
+            }
+        }
+
+        // Функции авторизации
+        async function signUpUser(email, password, displayName) {
+            if (!window.firebaseInitialized) {
+                throw new Error('Firebase не инициализирован');
+            }
+            
+            try {
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                await userCredential.user.updateProfile({ displayName: displayName });
+                console.log('Пользователь зарегистрирован:', userCredential.user.uid);
+            } catch (error) {
+                throw error;
+            }
+        }
+
+        async function signInUser(email, password) {
+            if (!window.firebaseInitialized) {
+                throw new Error('Firebase не инициализирован');
+            }
+            
+            try {
+                const userCredential = await auth.signInWithEmailAndPassword(email, password);
+                console.log('Пользователь вошел:', userCredential.user.uid);
+            } catch (error) {
+                throw error;
+            }
+        }
+
+        async function signOutUser() {
+            if (!window.firebaseInitialized) {
+                return;
+            }
+            
+            try {
+                await auth.signOut();
+                console.log('Пользователь вышел');
+                entries = [];
+                showView('log');
+            } catch (error) {
+                console.error('Ошибка выхода:', error);
+            }
+        }
+
+        function updateUserStatus(user) {
+            const displayName = user.displayName || user.email.split('@')[0];
+            document.getElementById('userStatus').textContent = `👤 ${displayName}`;
+        }
+
+        function showAuthModal() {
+            document.getElementById('authModal').classList.add('show');
+        }
+
+        function hideAuthModal() {
+            document.getElementById('authModal').classList.remove('show');
+        }
+
+        // Глобальные функции для доступа из других частей кода
+        window.signUpUser = signUpUser;
+        window.signInUser = signInUser;
+        window.signOutUser = signOutUser;
+
+        // Инициализация при загрузке страницы
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('Инициализация приложения...');
+            
+            // Сначала инициализируем Firebase
+            const firebaseReady = await initializeFirebase();
+            
+            // Затем инициализируем основное приложение
+            if (window.initApp) {
+                window.initApp();
+            }
+            
+            // Обновляем статус Firebase в настройках
+            const firebaseStatus = document.getElementById('firebaseStatus');
+            if (firebaseStatus) {
+                if (firebaseReady) {
+                    firebaseStatus.innerHTML = '✅ Подключено к Firebase';
+                } else {
+                    firebaseStatus.innerHTML = '❌ Ошибка подключения к Firebase';
+                }
+            }
+        });
+    </script>
+
+    <style>
+        :root {
+            --primary-color: #8b5cf6;
+            --primary-hover: #7c3aed;
+            --secondary-color: #ec4899;
+            --bg-from: #f3e8ff;
+            --bg-via: #fdf2f8;
+            --bg-to: #dbeafe;
+        }
+
+        .theme-purple {
+            --primary-color: #8b5cf6;
+            --primary-hover: #7c3aed;
+            --secondary-color: #ec4899;
+            --bg-from: #f3e8ff;
+            --bg-via: #fdf2f8;
+            --bg-to: #dbeafe;
+        }
+
+        .theme-blue {
+            --primary-color: #3b82f6;
+            --primary-hover: #2563eb;
+            --secondary-color: #06b6d4;
+            --bg-from: #dbeafe;
+            --bg-via: #f0f9ff;
+            --bg-to: #cffafe;
+        }
+
+        .theme-green {
+            --primary-color: #10b981;
+            --primary-hover: #059669;
+            --secondary-color: #34d399;
+            --bg-from: #d1fae5;
+            --bg-via: #ecfdf5;
+            --bg-to: #f0fdf4;
+        }
+
+        .theme-orange {
+            --primary-color: #f59e0b;
+            --primary-hover: #d97706;
+            --secondary-color: #fb923c;
+            --bg-from: #fef3c7;
+            --bg-via: #fffbeb;
+            --bg-to: #ffedd5;
+        }
+
+        .theme-rose {
+            --primary-color: #e11d48;
+            --primary-hover: #be185d;
+            --secondary-color: #f43f5e;
+            --bg-from: #fecdd3;
+            --bg-via: #fff1f2;
+            --bg-to: #ffe4e6;
+        }
+
+        body {
+            background: linear-gradient(to bottom right, var(--bg-from), var(--bg-via), var(--bg-to));
+        }
+
+        .primary-bg {
+            background-color: var(--primary-color);
+        }
+
+        .primary-hover:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .primary-border {
+            border-color: var(--primary-color);
+        }
+
+        .primary-text {
+            color: var(--primary-color);
+        }
+
+        .slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            cursor: pointer;
+        }
+        .slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            cursor: pointer;
+            border: none;
+        }
+
+        /* Mobile optimizations */
+        @media (max-width: 768px) {
+            .mobile-grid {
+                grid-template-columns: repeat(2, 1fr) !important;
+                gap: 1rem;
+            }
+            .mobile-nav {
+                flex-direction: row;
+                gap: 0.25rem;
+            }
+            .mobile-nav button {
+                flex: 1;
+                text-align: center;
+                font-size: 0.75rem;
+                padding: 0.5rem 0.25rem;
+            }
+            body {
+                padding: 0.5rem;
+            }
+            .max-w-4xl {
+                padding: 0;
+            }
+        }
+
+        /* Touch improvements */
+        button {
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+        
+        input, textarea {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .emoji-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 0.5rem;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .emoji-btn {
+            padding: 0.5rem;
+            border: 2px solid transparent;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 1.5rem;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .emoji-btn:hover {
+            border-color: var(--primary-color);
+            background-color: rgba(139, 92, 246, 0.1);
+        }
+
+        .emoji-btn.selected {
+            border-color: var(--primary-color);
+            background-color: rgba(139, 92, 246, 0.2);
+        }
+
+        .theme-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 3px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .theme-btn.active {
+            border-color: #374151;
+            transform: scale(1.1);
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .offline-indicator {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: #ef4444;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.75rem;
+            z-index: 9999;
+        }
+
+        .online {
+            background: #10b981 !important;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <!-- Индикатор подключения -->
+    <div id="connectionStatus" class="offline-indicator" style="display: none;">
+        🌐 Проверка подключения...
+    </div>
+
+    <div class="max-w-4xl mx-auto p-4">
+        <!-- Header -->
+        <div class="text-center mb-6 pt-4">
+            <div class="flex justify-between items-center mb-4">
+                <button onclick="showThemeSelector()" class="p-2 rounded-full bg-white shadow-lg hover:shadow-xl transition-all">
+                    🎨
+                </button>
+                <h1 class="text-3xl md:text-4xl font-bold text-gray-800">Journey of Emotion</h1>
+                <div class="flex space-x-2">
+                    <button onclick="showView('settings')" class="p-2 rounded-full bg-white shadow-lg hover:shadow-xl transition-all">
+                        ⚙️
+                    </button>
+                    <button id="headerLoginBtn" onclick="showAuthModal()" class="p-2 rounded-full bg-white shadow-lg hover:shadow-xl transition-all" title="Войти">
+                        🔑
+                    </button>
+                </div>
+            </div>
+            <p class="text-gray-600 text-sm md:text-base px-4">Отслеживайте, размышляйте и понимайте свои эмоциональные паттерны</p>
+            <div class="text-xs text-gray-500 mt-2">
+                <span id="userStatus">🔄 Инициализация...</span>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="flex justify-center mb-6">
+            <div class="bg-white rounded-full p-1 shadow-lg mobile-nav w-full max-w-md flex">
+                <button onclick="showView('log')" id="logBtn" class="flex-1 px-4 py-2 rounded-full transition-all primary-bg text-white shadow-md text-sm">
+                    ➕ Записать
+                </button>
+                <button onclick="showView('history')" id="historyBtn" class="flex-1 px-4 py-2 rounded-full transition-all text-gray-600 hover:bg-gray-100 text-sm">
+                    📅 История
+                </button>
+                <button onclick="showView('insights')" id="insightsBtn" class="flex-1 px-4 py-2 rounded-full transition-all text-gray-600 hover:bg-gray-100 text-sm">
+                    📊 Аналитика
+                </button>
+            </div>
+        </div>
+
+        <!-- Log View -->
+        <div id="logView" class="bg-white rounded-2xl shadow-xl p-4 md:p-8 mx-2 md:max-w-2xl md:mx-auto">
+            <h2 class="text-xl md:text-2xl font-semibold text-gray-800 mb-4 md:mb-6 text-center">Как вы себя чувствуете?</h2>
+            
+            <!-- Emotion Selection -->
+            <div class="mb-4 md:mb-6">
+                <div class="flex justify-between items-center mb-3 md:mb-4">
+                    <h3 class="text-base md:text-lg font-medium text-gray-700">Выберите эмоцию:</h3>
+                    <button onclick="showAddEmotionModal()" class="text-sm primary-text hover:underline">
+                        + Добавить свою
+                    </button>
+                </div>
+                <div id="emotionGrid" class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mobile-grid">
+                    <!-- Emotions will be rendered here -->
+                </div>
+            </div>
+
+            <!-- Intensity Slider -->
+            <div id="intensitySection" class="mb-4 md:mb-6 hidden">
+                <h3 class="text-base md:text-lg font-medium text-gray-700 mb-3 md:mb-4">
+                    Интенсивность: <span id="intensityValue">5</span>/10
+                </h3>
+                <input type="range" min="1" max="10" value="5" id="intensitySlider" 
+                       class="w-full h-3 md:h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider">
+                <div class="flex justify-between text-xs md:text-sm text-gray-500 mt-1">
+                    <span>Слабо</span>
+                    <span>Сильно</span>
+                </div>
+            </div>
+
+            <!-- Trigger Input -->
+            <div id="triggerSection" class="mb-4 md:mb-6 hidden">
+                <h3 class="text-base md:text-lg font-medium text-gray-700 mb-2">Что вызвало эту эмоцию?</h3>
+                <input type="text" id="triggerInput" placeholder="например, встреча на работе, разговор с другом..." 
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm md:text-base">
+            </div>
+
+            <!-- Note Input -->
+            <div id="noteSection" class="mb-4 md:mb-6 hidden">
+                <h3 class="text-base md:text-lg font-medium text-gray-700 mb-2">Дополнительные заметки (необязательно)</h3>
+                <textarea id="noteInput" placeholder="Как ощущалась эта эмоция? Какие мысли с ней пришли?" 
+                          rows="3" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm md:text-base resize-none"></textarea>
+            </div>
+
+            <!-- Submit Button -->
+            <button id="saveBtn" onclick="saveEntry()" class="w-full primary-bg primary-hover text-white py-3 md:py-3 rounded-lg transition-colors font-medium shadow-lg hidden text-sm md:text-base">
+                <span id="saveText">Сохранить запись</span>
+                <span id="saveLoader" class="loading hidden"></span>
+            </button>
+        </div>
+
+        <!-- History View -->
+        <div id="historyView" class="bg-white rounded-2xl shadow-xl p-4 md:p-8 mx-2 hidden">
+            <div class="flex justify-between items-center mb-4 md:mb-6">
+                <h2 class="text-xl md:text-2xl font-semibold text-gray-800">Ваше эмоциональное путешествие</h2>
+                <button onclick="refreshHistory()" class="text-sm primary-text hover:underline">
+                    🔄 Обновить
+                </button>
+            </div>
+            <div id="historyContent">
+                <div class="text-center py-8">
+                    <div class="loading mx-auto mb-4"></div>
+                    <p class="text-gray-500">Загружаем ваши записи...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Insights View -->
+        <div id="insightsView" class="bg-white rounded-2xl shadow-xl p-4 md:p-8 mx-2 hidden">
+            <h2 class="text-xl md:text-2xl font-semibold text-gray-800 mb-4 md:mb-6">Эмоциональная аналитика</h2>
+            <div id="insightsContent">
+                <div class="text-center py-8">
+                    <div class="loading mx-auto mb-4"></div>
+                    <p class="text-gray-500">Анализируем ваши данные...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings View -->
+        <div id="settingsView" class="bg-white rounded-2xl shadow-xl p-4 md:p-8 mx-2 hidden">
+            <h2 class="text-xl md:text-2xl font-semibold text-gray-800 mb-4 md:mb-6">Настройки</h2>
+            
+            <div class="space-y-6">
+                <!-- Firebase Status -->
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <h3 class="text-lg font-medium text-gray-700 mb-2">Статус синхронизации</h3>
+                    <div id="firebaseStatus" class="text-sm text-gray-600">
+                        <div class="loading inline-block mr-2"></div>
+                        Инициализация...
+                    </div>
+                    <div class="mt-2 text-xs text-gray-500">
+                        Конфигурация загружается безопасно с сервера
+                    </div>
+                </div>
+
+                <!-- Theme Selection -->
+                <div>
+                    <h3 class="text-lg font-medium text-gray-700 mb-3">Цветовая тема</h3>
+                    <div class="flex space-x-3">
+                        <button onclick="changeTheme('purple')" class="theme-btn theme-purple" style="background: linear-gradient(45deg, #8b5cf6, #ec4899)" data-theme="purple"></button>
+                        <button onclick="changeTheme('blue')" class="theme-btn theme-blue" style="background: linear-gradient(45deg, #3b82f6, #06b6d4)" data-theme="blue"></button>
+                        <button onclick="changeTheme('green')" class="theme-btn theme-green" style="background: linear-gradient(45deg, #10b981, #34d399)" data-theme="green"></button>
+                        <button onclick="changeTheme('orange')" class="theme-btn theme-orange" style="background: linear-gradient(45deg, #f59e0b, #fb923c)" data-theme="orange"></button>
+                        <button onclick="changeTheme('rose')" class="theme-btn theme-rose" style="background: linear-gradient(45deg, #e11d48, #f43f5e)" data-theme="rose"></button>
+                    </div>
+                </div>
+
+                <!-- Custom Emotions Management -->
+                <div>
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-lg font-medium text-gray-700">Ваши эмоции</h3>
+                        <button onclick="showAddEmotionModal()" class="primary-bg primary-hover text-white px-4 py-2 rounded-lg text-sm">
+                            Добавить эмоцию
+                        </button>
+                    </div>
+                    <div id="customEmotionsList" class="space-y-2">
+                        <!-- Custom emotions will be listed here -->
+                    </div>
+                </div>
+
+                <!-- Data Management -->
+                <div>
+                    <h3 class="text-lg font-medium text-gray-700 mb-3">Управление данными</h3>
+                    <div class="space-y-2">
+                        <button onclick="exportData()" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg text-sm">
+                            📥 Экспорт данных
+                        </button>
+                        <button onclick="syncData()" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded-lg text-sm">
+                            🔄 Синхронизировать данные
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Psychology Tips Section -->
+        <div class="mt-8 bg-white rounded-2xl shadow-xl p-4 md:p-6 mx-2">
+            <div class="text-center mb-4">
+                <h3 class="text-lg md:text-xl font-semibold text-gray-800 mb-2">💡 Совет психолога</h3>
+                <div id="psychologyTip" class="bg-gradient-to-r from-purple-50 to-pink-50 p-4 rounded-lg">
+                    <p id="tipText" class="text-gray-700 text-sm md:text-base italic mb-2">Загружаем совет...</p>
+                    <p id="tipAuthor" class="text-gray-600 text-xs md:text-sm">—</p>
+                </div>
+                <div class="mt-3 flex justify-center space-x-2">
+                    <button onclick="loadNewTip()" class="primary-bg primary-hover text-white px-4 py-2 rounded-lg text-sm">
+                        Новый совет
+                    </button>
+                    <div class="flex items-center text-xs text-gray-500">
+                        <span id="countdown">30</span>s
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auth Modal -->
+    <div id="authModal" class="modal show">
+        <div class="bg-white rounded-2xl p-6 m-4 max-w-md w-full">
+            <div class="text-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">Journey of Emotion</h2>
+                <p class="text-gray-600">Войдите или зарегистрируйтесь, чтобы сохранять свои эмоции в облаке</p>
+            </div>
+
+            <!-- Login Form -->
+            <div id="loginForm">
+                <h3 class="text-lg font-semibold mb-4">Вход</h3>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                    <input type="email" id="loginEmail" placeholder="your@email.com" 
+                           class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Пароль</label>
+                    <input type="password" id="loginPassword" placeholder="••••••••" 
+                           class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                </div>
+
+                <div class="mb-4">
+                    <button onclick="handleLogin()" class="w-full primary-bg primary-hover text-white py-3 rounded-lg font-medium">
+                        <span id="loginText">Войти</span>
+                        <span id="loginLoader" class="loading hidden"></span>
+                    </button>
+                </div>
+
+                <div class="text-center">
+                    <button onclick="showRegisterForm()" class="text-sm primary-text hover:underline">
+                        Нет аккаунта? Зарегистрироваться
+                    </button>
+                </div>
+            </div>
+
+            <!-- Register Form -->
+            <div id="registerForm" class="hidden">
+                <h3 class="text-lg font-semibold mb-4">Регистрация</h3>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Имя</label>
+                    <input type="text" id="registerName" placeholder="Ваше имя" 
+                           class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                    <input type="email" id="registerEmail" placeholder="your@email.com" 
+                           class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Пароль</label>
+                    <input type="password" id="registerPassword" placeholder="••••••••" 
+                           class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Подтвердите пароль</label>
+                    <input type="password" id="confirmPassword" placeholder="••••••••" 
+                           class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                </div>
+
+                <div class="mb-4">
+                    <button onclick="handleRegister()" class="w-full primary-bg primary-hover text-white py-3 rounded-lg font-medium">
+                        <span id="registerText">Зарегистрироваться</span>
+                        <span id="registerLoader" class="loading hidden"></span>
+                    </button>
+                </div>
+
+                <div class="text-center">
+                    <button onclick="showLoginForm()" class="text-sm primary-text hover:underline">
+                        Уже есть аккаунт? Войти
+                    </button>
+                </div>
+            </div>
+
+            <!-- Error Message -->
+            <div id="authError" class="mt-4 p-3 bg-red-100 border border-red-300 rounded-lg text-red-700 text-sm hidden">
+                <span id="authErrorText"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Theme Selector Modal -->
+    <div id="themeModal" class="modal">
+        <div class="bg-white rounded-2xl p-6 m-4 max-w-sm w-full">
+            <h3 class="text-lg font-semibold mb-4">Выберите тему</h3>
+            <div class="grid grid-cols-3 gap-3 mb-4">
+                <button onclick="changeTheme('purple')" class="theme-btn mx-auto theme-purple" style="background: linear-gradient(45deg, #8b5cf6, #ec4899)" data-theme="purple"></button>
+                <button onclick="changeTheme('blue')" class="theme-btn mx-auto theme-blue" style="background: linear-gradient(45deg, #3b82f6, #06b6d4)" data-theme="blue"></button>
+                <button onclick="changeTheme('green')" class="theme-btn mx-auto theme-green" style="background: linear-gradient(45deg, #10b981, #34d399)" data-theme="green"></button>
+                <button onclick="changeTheme('orange')" class="theme-btn mx-auto theme-orange" style="background: linear-gradient(45deg, #f59e0b, #fb923c)" data-theme="orange"></button>
+                <button onclick="changeTheme('rose')" class="theme-btn mx-auto theme-rose" style="background: linear-gradient(45deg, #e11d48, #f43f5e)" data-theme="rose"></button>
+            </div>
+            <button onclick="closeThemeModal()" class="w-full bg-gray-200 text-gray-800 py-2 rounded-lg">
+                Закрыть
+            </button>
+        </div>
+    </div>
+
+    <!-- Add Emotion Modal -->
+    <div id="addEmotionModal" class="modal">
+        <div class="bg-white rounded-2xl p-6 m-4 max-w-md w-full">
+            <h3 class="text-lg font-semibold mb-4">Добавить новую эмоцию</h3>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Название эмоции</label>
+                <input type="text" id="emotionNameInput" placeholder="Например: Вдохновение" 
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Выберите эмодзи</label>
+                <div class="emoji-grid" id="emojiGrid">
+                    <!-- Emojis will be generated here -->
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Выбранная эмоция</label>
+                <div class="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                    <div id="selectedEmojiPreview" class="w-8 h-8 flex items-center justify-center text-2xl">❓</div>
+                    <span id="selectedEmotionNamePreview" class="text-gray-500">Выберите эмодзи и введите название</span>
+                </div>
+            </div>
+
+            <div class="flex space-x-3">
+                <button onclick="addCustomEmotion()" class="flex-1 primary-bg primary-hover text-white py-2 rounded-lg">
+                    Добавить
+                </button>
+                <button onclick="closeAddEmotionModal()" class="flex-1 bg-gray-200 text-gray-800 py-2 rounded-lg">
+                    Отмена
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Application data
+        let entries = [];
+        let selectedEmotion = '';
+        let currentTheme = localStorage.getItem('selectedTheme') || 'purple';
+        let selectedEmoji = '';
+        let isOnline = navigator.onLine;
+
+        // Default emotions
+        const defaultEmotions = {
+            joy: { name: 'Радость', color: 'bg-yellow-400', emoji: '☀️', isDefault: true },
+            love: { name: 'Любовь', color: 'bg-pink-400', emoji: '❤️', isDefault: true },
+            excitement: { name: 'Волнение', color: 'bg-orange-400', emoji: '⚡', isDefault: true },
+            calm: { name: 'Спокойствие', color: 'bg-blue-400', emoji: '☁️', isDefault: true },
+            neutral: { name: 'Нейтрально', color: 'bg-gray-400', emoji: '😐', isDefault: true },
+            sadness: { name: 'Грусть', color: 'bg-blue-600', emoji: '🌧️', isDefault: true },
+            anger: { name: 'Гнев', color: 'bg-red-500', emoji: '😠', isDefault: true },
+            anxiety: { name: 'Тревога', color: 'bg-purple-500', emoji: '😰', isDefault: true }
+        };
+
+        // Load custom emotions
+        let customEmotions = JSON.parse(localStorage.getItem('customEmotions')) || {};
+        let emotions = { ...defaultEmotions, ...customEmotions };
+
+        // Available emojis for selection
+        const availableEmojis = [
+            '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣',
+            '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰',
+            '😘', '😗', '☺️', '😚', '😙', '🥲', '😋', '😛',
+            '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔',
+            '🤐', '🤨', '😐', '😑', '😶', '😏', '😒', '🙄',
+            '😬', '🤥', '😔', '😪', '🤤', '😴', '😷', '🤒',
+            '🤕', '🤢', '🤮', '🤧', '🥵', '🥶', '🥴', '😵',
+            '🤯', '🤠', '🥳', '🥸', '😎', '🤓', '🧐', '😕',
+            '😟', '🙁', '☹️', '😮', '😯', '😲', '😳', '🥺',
+            '😦', '😧', '😨', '😰', '😥', '😢', '😭', '😱',
+            '😖', '😣', '😞', '😓', '😩', '😫', '🥱', '😤',
+            '😡', '😠', '🤬', '😈', '👿', '💀', '☠️', '💩',
+            '🤡', '👹', '👺', '👻', '👽', '👾', '🤖', '🎭',
+            '💫', '⭐', '🌟', '✨', '⚡', '💥', '💢', '💯',
+            '💤', '💨', '🤍', '🖤', '❤️', '🧡', '💛', '💚',
+            '💙', '💜', '🤎', '💔', '❣️', '💕', '💞', '💓',
+            '💗', '💖', '💘', '💝', '💟', '☮️', '✝️', '☪️',
+            '🕉️', '☸️', '✡️', '🔯', '🕎', '☯️', '☦️', '🛐'
+        ];
+
+        // Helper function to safely convert dates
+        function safeTimestamp(dateValue) {
+            if (!dateValue) return new Date();
+            
+            if (dateValue instanceof Date) {
+                return dateValue;
+            }
+            
+            // Handle Firebase Timestamp
+            if (dateValue && typeof dateValue.toDate === 'function') {
+                return dateValue.toDate();
+            }
+            
+            // Handle string or number
+            try {
+                const date = new Date(dateValue);
+                return isNaN(date.getTime()) ? new Date() : date;
+            } catch (error) {
+                console.warn('Invalid date value:', dateValue);
+                return new Date();
+            }
+        }
+
+        // Firebase functions with enhanced error handling
+        async function saveEntryToFirebase(entry) {
+            if (!window.firebaseInitialized || !window.currentUser || !db) {
+                throw new Error('Firebase не инициализирован');
+            }
+
+            try {
+                const docRef = await db.collection('users')
+                    .doc(window.currentUser.uid)
+                    .collection('emotions')
+                    .add({
+                        ...entry,
+                        userId: window.currentUser.uid,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        timestamp: firebase.firestore.Timestamp.fromDate(entry.timestamp)
+                    });
+                console.log('Запись сохранена:', docRef.id);
+                return docRef.id;
+            } catch (error) {
+                console.error('Ошибка сохранения:', error);
+                throw error;
+            }
+        }
+
+        async function loadEntriesFromFirebase() {
+            if (!window.firebaseInitialized || !window.currentUser || !db) {
+                return [];
+            }
+
+            try {
+                const snapshot = await db.collection('users')
+                    .doc(window.currentUser.uid)
+                    .collection('emotions')
+                    .orderBy('createdAt', 'desc')
+                    .get();
+                
+                const firebaseEntries = [];
+                
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    firebaseEntries.push({
+                        id: data.id || doc.id,
+                        firebaseId: doc.id,
+                        ...data,
+                        timestamp: safeTimestamp(data.timestamp || data.createdAt)
+                    });
+                });
+                
+                return firebaseEntries;
+            } catch (error) {
+                console.error('Ошибка загрузки:', error);
+                return [];
+            }
+        }
+
+        async function deleteEntryFromFirebase(entryId) {
+            if (!window.firebaseInitialized || !window.currentUser || !db) {
+                throw new Error('Firebase не инициализирован');
+            }
+
+            try {
+                const entry = entries.find(e => e.id == entryId || e.firebaseId == entryId);
+                const docId = entry ? (entry.firebaseId || entry.id) : entryId;
+                
+                await db.collection('users')
+                    .doc(window.currentUser.uid)
+                    .collection('emotions')
+                    .doc(docId)
+                    .delete();
+                    
+                console.log('Запись удалена из Firebase:', docId);
+            } catch (error) {
+                console.error('Ошибка удаления из Firebase:', error);
+                throw error;
+            }
+        }
+
+        // User data loading function
+        window.loadUserData = async function() {
+            try {
+                if (!window.firebaseInitialized) {
+                    throw new Error('Firebase не инициализирован');
+                }
+                
+                updateConnectionStatus('online', 'Подключено к базе данных');
+                document.getElementById('userStatus').textContent = '✅ Подключено к облаку';
+                
+                const firebaseEntries = await loadEntriesFromFirebase();
+                const localEntries = JSON.parse(localStorage.getItem('emotionEntries')) || [];
+                
+                entries = firebaseEntries.length > 0 ? firebaseEntries : localEntries;
+                
+                // Ensure all entries have valid timestamps
+                entries = entries.map(entry => ({
+                    ...entry,
+                    timestamp: safeTimestamp(entry.timestamp)
+                }));
+                
+                console.log(`Загружено ${entries.length} записей`);
+                
+                const currentView = getCurrentView();
+                if (currentView === 'history') {
+                    displayHistory();
+                } else if (currentView === 'insights') {
+                    displayInsights();
+                }
+                
+            } catch (error) {
+                console.error('Ошибка загрузки данных:', error);
+                updateConnectionStatus('offline', 'Работаем оффлайн');
+                document.getElementById('userStatus').textContent = '⚠️ Оффлайн режим';
+                
+                // Load local data with safe timestamps
+                const localEntries = JSON.parse(localStorage.getItem('emotionEntries')) || [];
+                entries = localEntries.map(entry => ({
+                    ...entry,
+                    timestamp: safeTimestamp(entry.timestamp)
+                }));
+            }
+        };
+
+        // Connection monitoring
+        function updateConnectionStatus(status, message) {
+            const indicator = document.getElementById('connectionStatus');
+            const firebaseStatus = document.getElementById('firebaseStatus');
+            
+            if (status === 'online') {
+                indicator.className = 'offline-indicator online';
+                indicator.textContent = '🌐 Онлайн';
+                if (firebaseStatus) {
+                    firebaseStatus.innerHTML = '✅ ' + message;
+                }
+                isOnline = true;
+            } else {
+                indicator.className = 'offline-indicator';
+                indicator.textContent = '📴 Оффлайн';
+                if (firebaseStatus) {
+                    firebaseStatus.innerHTML = '⚠️ ' + message;
+                }
+                isOnline = false;
+            }
+            
+            indicator.style.display = 'block';
+            setTimeout(() => {
+                indicator.style.display = 'none';
+            }, 3000);
+        }
+
+        // Network event listeners
+        window.addEventListener('online', () => {
+            updateConnectionStatus('online', 'Подключение восстановлено');
+            if (window.currentUser) {
+                syncData();
+            }
+        });
+
+        window.addEventListener('offline', () => {
+            updateConnectionStatus('offline', 'Нет подключения к интернету');
+        });
+
+        // Остальные функции приложения идентичны предыдущим версиям...
+        // Для краткости опущены, но включают все функции из предыдущего кода
+
+        // Core application functions
+        function getCurrentView() {
+            if (!document.getElementById('logView').classList.contains('hidden')) return 'log';
+            if (!document.getElementById('historyView').classList.contains('hidden')) return 'history';
+            if (!document.getElementById('insightsView').classList.contains('hidden')) return 'insights';
+            if (!document.getElementById('settingsView').classList.contains('hidden')) return 'settings';
+            return 'log';
